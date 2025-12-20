@@ -23,6 +23,12 @@ class ModelConfig:
 # Available models for selection
 AVAILABLE_MODELS: List[ModelConfig] = [
     ModelConfig(
+        id="xiaomi/mimo-v2-flash:free",
+        name="Xiaomi MiMo-V2-Flash",
+        description="State-of-the-Art Deep Research Model (256k Context)",
+        is_free=True
+    ),
+    ModelConfig(
         id="alibaba/tongyi-deepresearch-30b-a3b:free",
         name="Tongyi DeepResearch 30B",
         description="Optimized for deep research tasks",
@@ -50,7 +56,12 @@ AVAILABLE_MODELS: List[ModelConfig] = [
     ),
 ]
 
-DEFAULT_MODEL_ID = "alibaba/tongyi-deepresearch-30b-a3b:free"
+DEFAULT_MODEL_ID = "xiaomi/mimo-v2-flash:free"
+
+# Global Model Parameters
+TEMPERATURE = 0.3
+TOP_P = 0.95
+MAX_CONTEXT_TOKENS = 200000
 
 def get_model_by_id(model_id: str) -> Optional[ModelConfig]:
     """Get a model configuration by its ID."""
@@ -71,8 +82,9 @@ def get_model_choices() -> Dict[str, str]:
 class SearchConfig:
     """Configuration for search tools."""
     min_results: int = 3
-    max_results: int = 10
-    default_results: int = 5
+    max_results: int = 20
+    default_results: int = 10
+    time_limit: float = 3.0
     
     # Date range options for UI
     date_range_options: Dict[str, Optional[int]] = field(default_factory=lambda: {
