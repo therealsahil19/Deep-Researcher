@@ -135,66 +135,39 @@ def get_react_system_prompt():
     Generates the ReAct system prompt with dynamic current date for temporal grounding.
     This prevents hallucinations about recent events by forcing the model to search.
     """
-    current_date = datetime.now().strftime("%B %d, %Y")
-    current_year = datetime.now().year
+    current_date = datetime.now().strftime("%Y-%m-%d")
     
-    return f"""You are a research assistant with access to REAL, EXTERNAL web search tools. When you use these tools, they will be executed by the system and the results will be returned to you. Do NOT simulate or roleplay tool usage. Do NOT output example calls, corrections, or explanations about tool formats. Just use them.
+    return f"""
+You are the Deep Research Agent, an expert investigator powered by Xiaomi MiMo-V2-Flash.
+Current Date: {current_date}
 
-## CRITICAL: TEMPORAL GROUNDING
-- **Today's date is: {current_date}**
-- You MUST use web search to verify ANY claims about events from {current_year - 2} onwards
-- NEVER rely on your training knowledge for events from the past 2 years
-- If you cannot find verification for a claim, you MUST explicitly state "I could not verify this claim"
-- When discussing recent LLMs, products, or events, ALWAYS search first before making any claims
+Your Goal: Answer the user's query by conducting a multi-step investigation.
+You have access to a massive 256k context window, so prioritize thoroughness over brevity.
 
-## ANTI-HALLUCINATION RULES (CRITICAL - FOLLOW STRICTLY):
-1. **NEVER fabricate** release dates, version numbers, model names, or technical specifications
-2. **NEVER assume** a product exists just because it sounds plausible
-3. **If search returns no results** about something, say "I could not find information about X" rather than guessing
-4. **Cross-verify important claims** using multiple searches (discovery + fact)
-5. **Acknowledge uncertainty** - Use phrases like "Based on available search results..." or "I could not independently verify..."
-6. **Date sensitivity** - For questions about specific months (e.g., "November 2025"), search explicitly for that time period
+--- RESEARCH METHODOLOGY ---
+1. **Decompose**: Break complex queries into smaller, searchable sub-questions.
+2. **Diversity**: Use "exa_search" for broad discovery and "tavily_search" for specific fact-checking.
+3. **Synthesis**: Combine conflicting information by noting the discrepancy, rather than ignoring it.
+4. **Citations**: Every claim must be supported by the search results provided.
 
-## Available Tools (REAL, will be executed externally):
+--- FORMAT INSTRUCTIONS (STRICT) ---
+You must strictly follow this ReAct loop format. Do not use internal <think> tags.
 
-1. **search_discovery**: Performs a broad web search using Exa. Use for exploring topics, finding resources, or landscape analysis.
-2. **search_fact**: Performs a targeted fact-check search using Tavily. Use for verifying specific claims, numbers, or dates.
+Thought: [Your reasoning about what information is missing or needs verification]
+Action: [The tool to use: 'search_discovery' or 'search_fact']
+Action Input: [The exact search query - strictly one line]
+Observation: [Wait for the tool output]
 
-## STRICT FORMAT (follow exactly):
+... (Repeat Thought/Action/Observation as needed) ...
 
-```
-Thought: [your reasoning about what to search for]
-Action: search_discovery OR search_fact
-Action Input: [a single plain-text search query string]
-```
+Final Answer: [Your comprehensive report, fully cited]
 
-Wait for the Observation (the system will provide real search results), then continue reasoning.
-
-## RESEARCH METHODOLOGY:
-1. **ALWAYS include dates in queries** - If the user asks about "November 2025", your search query MUST include "November 2025" or "2025"
-2. Start with broad discovery searches to understand the landscape
-3. Use fact searches to verify specific claims
-4. If information seems incomplete, search again with different queries
-5. Cross-reference information from multiple sources when possible
-6. **Verify publication dates** - Check if sources are from the correct time period
-7. Before finalizing, explicitly reason about what you KNOW vs what you're UNCERTAIN about
-
-When you have enough information AND have verified key claims, provide your final answer:
-
-```
-Thought: I now have enough verified information to answer. [List what you verified and what remains uncertain]
-Final Answer: [your comprehensive answer/report with clear sourcing]
-```
-
-## CRITICAL OUTPUT RULES:
-- Action Input MUST be a plain text search query (e.g., "LLMs released November 2025"). 
-- Do NOT use JSON, arrays, or any parameters like "use_autoprompt" or "query". There are no such parameters.
-- Do NOT output "Example Correct Calls" or "How to Fix It" sections. Just perform the research.
-- Do NOT explain tool formats to the user. Just use them silently and correctly.
-- Focus on answering the user's question with real research, not meta-commentary.
-- In your Final Answer, cite sources and acknowledge any limitations in your research.
-
-Begin!
+--- RULES & ANTI-HALLUCINATION ---
+1. **No Silent Failures**: If a search fails, admit it in the "Thought" and try a different query.
+2. **Zero-Shot Accuracy**: Do not guess specific dates, prices, or version numbers. Search for them.
+3. **Date Awareness**: If the user asks for "latest" news, strictly check the date of the search results.
+4. **Action Input constraint**: "Action Input" must be a single string. No JSON or Markdown blocks inside the input.
+5. If you have sufficient information to answer the user request, go straight to "Final Answer".
 """
 
 
@@ -492,6 +465,14 @@ def stream_deep_research(messages, api_keys, model_id=None, num_results=None):
     max_steps = config.REACT_CONFIG.max_steps
     step_count = 0
 
+    # Configure dynamic parameters for MiMo vs others
+    temperature = config.TEMPERATURE if "mimo" in model_id or "flash" in model_id else 0.7
+    top_p = config.TOP_P
+
+    extra_body = {}
+    if "mimo" in model_id:
+        extra_body["include_reasoning"] = False
+
     while step_count < max_steps:
         step_count += 1
         
@@ -502,6 +483,9 @@ def stream_deep_research(messages, api_keys, model_id=None, num_results=None):
             stream = client.chat.completions.create(
                 model=model_id,
                 messages=internal_messages,
+                temperature=temperature,
+                top_p=top_p,
+                extra_body=extra_body,
                 stream=True
             )
 
@@ -667,10 +651,24 @@ Provide a structured verification report with:
 Be strict - if a claim cannot be verified from the search results, it should be flagged.
 """
 
+    # Configure dynamic parameters for verification
+    # Use default model (MiMo) or fallback to config default
+    model_id = config.DEFAULT_MODEL_ID
+
+    temperature = config.TEMPERATURE if "mimo" in model_id or "flash" in model_id else 0.7
+    top_p = config.TOP_P
+
+    extra_body = {}
+    if "mimo" in model_id:
+        extra_body["include_reasoning"] = False
+
     try:
         response = client.chat.completions.create(
-            model="alibaba/tongyi-deepresearch-30b-a3b:free",
+            model=model_id,
             messages=[{"role": "user", "content": verification_prompt}],
+            temperature=temperature,
+            top_p=top_p,
+            extra_body=extra_body,
             stream=False
         )
         
