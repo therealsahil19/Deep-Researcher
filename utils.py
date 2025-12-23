@@ -6,6 +6,7 @@ from fpdf.enums import XPos, YPos
 import re
 import json
 import os
+import calendar
 
 from datetime import datetime
 from tavily import TavilyClient
@@ -21,6 +22,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Global cache for rate limiting to reduce disk I/O
+_USAGE_CACHE = {}
 
 # =============================================================================
 # ACTION INPUT PARSING AND VALIDATION
@@ -196,6 +200,8 @@ def check_and_update_limit(service_name):
     Uses settings from config.RATE_LIMIT_CONFIG.
     Returns (True, "") if allowed, or (False, reason) if blocked.
     """
+    global _USAGE_CACHE
+
     # Check if rate limiting is enabled
     if not config.RATE_LIMIT_CONFIG.enabled:
         return True, ""
@@ -209,14 +215,18 @@ def check_and_update_limit(service_name):
 
     initial_service_data = {"day": today, "month": this_month, "daily_count": 0, "monthly_count": 0}
 
-    # Initialize usage data if file doesn't exist or is invalid
-    usage_data = {}
-    if os.path.exists(usage_file):
-        try:
-            with open(usage_file, "r") as f:
-                usage_data = json.load(f)
-        except json.JSONDecodeError:
-            pass
+    # Initialize usage data from cache or file
+    if not _USAGE_CACHE:
+        if os.path.exists(usage_file):
+            try:
+                with open(usage_file, "r") as f:
+                    _USAGE_CACHE = json.load(f)
+            except json.JSONDecodeError:
+                pass
+        else:
+             _USAGE_CACHE = {}
+
+    usage_data = _USAGE_CACHE
 
     # Ensure services exist in data
     if "tavily" not in usage_data:
@@ -253,6 +263,8 @@ def check_and_update_limit(service_name):
     service_data["monthly_count"] += 1
 
     # Save back to file
+    # We update the cache first (already done since it's a reference)
+    # Then we write to file to persist
     try:
         with open(usage_file, "w") as f:
             json.dump(usage_data, f, indent=4)
@@ -266,8 +278,6 @@ def extract_date_range_from_query(query):
     Extracts date range from a query string.
     Returns (start_date, end_date) in YYYY-MM-DD format, or (None, None) if no date found.
     """
-    import calendar
-    
     # Pattern for "Month Year" (e.g., "November 2025" or "Nov 2025")
     month_year_pattern = r'(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{4})'
     match = re.search(month_year_pattern, query, re.IGNORECASE)
@@ -739,26 +749,27 @@ def apply_verification_to_report(original_report, verification_report):
 """
     return enhanced_report
 
+class DeepResearchPDF(FPDF):
+    """Custom PDF class for Deep Research reports."""
+    def header(self):
+        # Attempt to use DejaVuSans if registered, else fallback
+        font_family = 'DejaVu' if 'DejaVu' in self.fonts else 'helvetica'
+        self.set_font(font_family, 'B', 12)
+        self.cell(0, 10, 'Deep Research Report', border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        font_family = 'DejaVu' if 'DejaVu' in self.fonts else 'helvetica'
+        self.set_font(font_family, 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
+
 def generate_pdf(text):
     """
     Generates a PDF from the provided text and returns the bytes.
     Uses fpdf2.
     """
-    class PDF(FPDF):
-        def header(self):
-            # Attempt to use DejaVuSans if registered, else fallback
-            font_family = 'DejaVu' if 'DejaVu' in self.fonts else 'helvetica'
-            self.set_font(font_family, 'B', 12)
-            self.cell(0, 10, 'Deep Research Report', border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-            self.ln(10)
-
-        def footer(self):
-            self.set_y(-15)
-            font_family = 'DejaVu' if 'DejaVu' in self.fonts else 'helvetica'
-            self.set_font(font_family, 'I', 8)
-            self.cell(0, 10, f'Page {self.page_no()}', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C')
-
-    pdf = PDF()
+    pdf = DeepResearchPDF()
 
     # Register the Unicode font
     try:
