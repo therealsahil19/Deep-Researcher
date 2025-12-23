@@ -15,7 +15,8 @@ A powerful, autonomous research assistant that performs deep, multi-step investi
     -   **Tongyi DeepResearch 30B** (Research-optimized)
     -   **GPT-4o** & **Claude 3.5 Sonnet**
     -   **Gemini 2.0 Flash** & **Llama 3.1 70B**
--   **Transparent UI**: 
+    -   *And more (configurable in `config.py`)*
+-   **Transparent UI**:
     -   **🧠 Reasoning Tab**: Live stream of the agent's internal thought process.
     -   **📊 Report Tab**: Clean, professionally formatted research summary.
 -   **Export Ready**: One-click downloads for PDF and Markdown reports.
@@ -34,7 +35,7 @@ The agent operates on a **ReAct (Reason + Act)** framework:
 graph TD
     User([User Query]) --> UI[Streamlit Interface]
     UI --> Loop{ReAct Reasoning Loop}
-    
+
     subgraph "Reasoning Step"
     Loop --> Thought[LLM: What do I need to know?]
     Thought --> Action{Search Needed?}
@@ -42,7 +43,7 @@ graph TD
     Search --> Observation[Extract Context]
     Observation --> Loop
     end
-    
+
     Action -- No --> Draft[Draft Initial Report]
     Draft --> Verify[Sequential Thinking Verification]
     Verify --> Final[Final MD/PDF Report]
@@ -56,13 +57,13 @@ graph TD
 | `utils.py` | The "brain" of the agent—ReAct logic, search wrappers, and verification. |
 | `config.py` | Centralized settings for models, rate limits, and timeouts. |
 | `assets/` | Fonts and static resources for PDF generation. |
+| `test_utils.py` | Unit tests for utility functions. |
 
 ## ⚙️ Setup & Installation
 
 ### Prerequisites
 - Python 3.9+
-- [OpenRouter API Key](https://openrouter.ai/) (Required)
-- [Tavily](https://tavily.com/) or [Exa](https://exa.ai/) API Keys (Recommended for search)
+- API Keys (see below)
 
 ### Installation
 ```bash
@@ -73,9 +74,44 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### 🔐 Environment Variables
+
+You can set these in a `.env` file (if using `python-dotenv`), export them in your shell, or enter them directly in the application sidebar.
+
+| Variable | Description |
+| :--- | :--- |
+| `OPENROUTER_API_KEY` | **Required**. Get it from [OpenRouter](https://openrouter.ai/). |
+| `TAVILY_API_KEY` | Recommended for **Fact Search**. Get it from [Tavily](https://tavily.com/). |
+| `EXA_API_KEY` | Recommended for **Discovery Search**. Get it from [Exa](https://exa.ai/). |
+
 ### Running the App
 ```bash
 streamlit run app.py
+```
+
+## 🧪 Testing
+
+The project includes both unit tests and end-to-end tests.
+
+### Unit Tests
+Run the standard test suite for utility functions:
+```bash
+# Install pytest if not already installed
+pip install pytest
+
+# Run tests
+pytest test_utils.py
+```
+
+### End-to-End Tests
+For full UI testing using Playwright:
+```bash
+# Install playwright dependencies
+pip install playwright
+playwright install
+
+# Run E2E test
+python test_deep_research.py
 ```
 
 ## 📋 Configuration
